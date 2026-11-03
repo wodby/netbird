@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Runs the NetBird server (management and signal), the relay and nginx (dashboard and the front of the server)
+# together. When one of them stops, the others are stopped too and the container exits with its status, so it gets
+# restarted.
+
+set -e
+
+if [[ -n "${DEBUG}" ]]; then
+    set -x
+fi
+
+netbird-config
+
+parse_host_port() {
+    local rest="${1#*://}"
+    rest="${rest%%/*}"
+    if [[ "${rest}" =~ :[0-9]+$ ]]; then
+        printf '%s' "${rest}"
+    elif [[ "${1}" == https://* ]]; then
+        printf '%s:443' "${rest}"
+    else
+        printf '%s:80' "${rest}"
+    fi
+}
+
+relay_proto=rel
+if [[ "${NETBIRD_RELAY_URL}" == https://* ]]; then
+    relay_proto=rels
+fi
+
+pids=()
+
+stop() {
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+}
+
+trap stop TERM INT
+
+# The relay reads its settings from NB_* variables; they are passed to it alone. Clients reach it over WebSocket at
+# /relay. Its exposed address must match the address the server gives to clients.
+env \
+    NB_LISTEN_ADDRESS=:8082 \
+    NB_EXPOSED_ADDRESS="${relay_proto}://$(parse_host_port "${NETBIRD_RELAY_URL}")" \
+    NB_AUTH_SECRET="${NETBIRD_AUTH_SECRET}" \
+    NB_HEALTH_LISTEN_ADDRESS=127.0.0.1:9001 \
+    NB_METRICS_PORT=9091 \
+    NB_LOG_LEVEL="${NETBIRD_LOG_LEVEL:-info}" \
+    netbird-relay &
+pids+=($!)
+
+netbird-server --config /run/netbird/config.yaml &
+pids+=($!)
+
+nginx -e /dev/stderr -g 'daemon off;' &
+pids+=($!)
+
+status=0
+wait -n "${pids[@]}" || status=$?
+stop
+wait || true
+
+exit "${status}"
