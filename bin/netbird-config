@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# Writes the NetBird server configuration (/run/netbird/config.yaml) from environment variables and prepares the
+# dashboard's static files for the configured address. Run at every start, so a changed variable takes effect after a
+# restart. Variables are described in README.md.
+
+set -e
+
+if [[ -n "${DEBUG}" ]]; then
+    set -x
+fi
+
+config_dir=/run/netbird
+config="${config_dir}/config.yaml"
+data_dir=/var/lib/netbird
+html_dir=/usr/share/nginx/html
+html_source=/usr/share/netbird-dashboard
+
+fail() {
+    echo "netbird: $*" >&2
+    exit 1
+}
+
+# Prints a value as a single-quoted YAML scalar.
+yaml_quote() {
+    local value="${1//\'/\'\'}"
+    printf "'%s'" "${value}"
+}
+
+# Splits a URL like https://example.com or http://localhost:8080 into scheme, host and port (the scheme's default
+# port when none is given). The path, if any, is ignored.
+parse_url() {
+    local url="${1}" rest
+    case "${url}" in
+        https://*) url_scheme=https; rest="${url#https://}"; url_port=443 ;;
+        http://*) url_scheme=http; rest="${url#http://}"; url_port=80 ;;
+        *) return 1 ;;
+    esac
+    rest="${rest%%/*}"
+    if [[ "${rest}" =~ ^(\[[^]]+\]|[^:]+):([0-9]+)$ ]]; then
+        url_host="${BASH_REMATCH[1]}"
+        url_port="${BASH_REMATCH[2]}"
+    else
+        url_host="${rest}"
+    fi
+    [[ -n "${url_host}" ]]
+}
+
+# NetBird needs base64-encoded 32-byte keys. A value that already is one is used as is; any other value, such as a
+# generated password, is turned into one with SHA-256, so the same value always gives the same key.
+encryption_key() {
+    local value="${1}" decoded_len
+    decoded_len="$(printf '%s' "${value}" | base64 -d 2>/dev/null | wc -c || true)"
+    if [[ "${decoded_len}" -eq 32 && "${value}" =~ ^[A-Za-z0-9+/]{43}=$ ]]; then
+        printf '%s' "${value}"
+    else
+        printf '%s' "${value}" | sha256sum | cut -c1-64 | tr a-f A-F | basenc --base16 -d | base64 -w0
+    fi
+}
+
+[[ -n "${NETBIRD_URL}" ]] || fail "NETBIRD_URL is required: the address of the dashboard and the API, such as https://netbird.example.com"
+[[ -n "${NETBIRD_RELAY_URL}" ]] || fail "NETBIRD_RELAY_URL is required: the address of the relay, such as https://relay.netbird.example.com"
+[[ -n "${NETBIRD_AUTH_SECRET}" ]] || fail "NETBIRD_AUTH_SECRET is required: the secret the server and the relay share"
+[[ -n "${NETBIRD_STORE_ENCRYPTION_KEY}" ]] || fail "NETBIRD_STORE_ENCRYPTION_KEY is required: it encrypts sensitive data in the database"
+
+parse_url "${NETBIRD_URL}" || fail "NETBIRD_URL must start with https:// or http://, got ${NETBIRD_URL}"
+scheme="${url_scheme}"
+host="${url_host}"
+port="${url_port}"
+
+parse_url "${NETBIRD_RELAY_URL}" || fail "NETBIRD_RELAY_URL must start with https:// or http://, got ${NETBIRD_RELAY_URL}"
+relay_proto=rel
+if [[ "${url_scheme}" == https ]]; then
+    relay_proto=rels
+fi
+relay_address="${relay_proto}://${url_host}:${url_port}"
+
+base_url="${scheme}://${host}"
+if [[ ! ( "${scheme}" == https && "${port}" == 443 ) && ! ( "${scheme}" == http && "${port}" == 80 ) ]]; then
+    base_url="${base_url}:${port}"
+fi
+
+# STUN helps peers find their public address to connect directly. NetBird's own STUN server needs a public UDP port
+# that keeps the peers' source addresses, so by default peers use a public STUN server instead.
+stun_uris="${NETBIRD_STUN_URIS-stun:stun.cloudflare.com:3478}"
+stun_uris="${stun_uris//,/ }"
+
+store_key="$(encryption_key "${NETBIRD_STORE_ENCRYPTION_KEY}")"
+
+mkdir -p "${config_dir}"
+umask 077
+
+{
+    echo "server:"
+    echo "  listenAddress: '127.0.0.1:8081'"
+    echo "  exposedAddress: $(yaml_quote "${scheme}://${host}:${port}")"
+    # Not usable as a probe: it fails when the relay runs separately. Probes use nginx and the sign-in service.
+    echo "  healthcheckAddress: '127.0.0.1:9000'"
+    echo "  metricsPort: 9090"
+    echo "  logLevel: $(yaml_quote "${NETBIRD_LOG_LEVEL:-info}")"
+    echo "  logFile: console"
+    echo "  dataDir: $(yaml_quote "${data_dir}")"
+    echo "  authSecret: $(yaml_quote "${NETBIRD_AUTH_SECRET}")"
+    echo "  disableAnonymousMetrics: ${NETBIRD_DISABLE_ANONYMOUS_METRICS:-true}"
+    echo "  disableGeoliteUpdate: ${NETBIRD_DISABLE_GEOLITE_UPDATE:-false}"
+    # The relay runs as its own process with its own address, so the server doesn't start one.
+    echo "  relays:"
+    echo "    addresses:"
+    echo "    - $(yaml_quote "${relay_address}")"
+    echo "    credentialsTTL: '12h'"
+    echo "    secret: $(yaml_quote "${NETBIRD_AUTH_SECRET}")"
+    if [[ -n "${stun_uris// /}" ]]; then
+        echo "  stuns:"
+        for uri in ${stun_uris}; do
+            echo "  - uri: $(yaml_quote "${uri}")"
+        done
+    fi
+    # nginx in this container is the only direct peer allowed to pass the client address on; the proxies in front of
+    # it (such as the cluster's gateway) are trusted by address.
+    echo "  reverseProxy:"
+    echo "    trustedPeers:"
+    echo "    - '127.0.0.1/32'"
+    echo "    - '::1/128'"
+    echo "    trustedHTTPProxies:"
+    for cidr in ${NETBIRD_TRUSTED_PROXIES:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 127.0.0.1/32 ::1/128}; do
+        echo "    - $(yaml_quote "${cidr//,/}")"
+    done
+    echo "  auth:"
+    echo "    issuer: $(yaml_quote "${base_url}/oauth2")"
+    echo "    signKeyRefreshEnabled: true"
+    echo "    localAuthDisabled: false"
+    echo "    dashboardRedirectURIs:"
+    echo "    - $(yaml_quote "${base_url}/nb-auth")"
+    echo "    - $(yaml_quote "${base_url}/nb-silent-auth")"
+    echo "    dashboardPostLogoutRedirectURIs:"
+    echo "    - $(yaml_quote "${base_url}/")"
+    echo "    cliRedirectURIs:"
+    echo "    - 'http://localhost:53000/'"
+    if [[ -n "${NETBIRD_SESSION_COOKIE_ENCRYPTION_KEY}" ]]; then
+        echo "    sessionCookieEncryptionKey: $(yaml_quote "$(encryption_key "${NETBIRD_SESSION_COOKIE_ENCRYPTION_KEY}")")"
+    fi
+    # The first administrator is created only together with the sign-in database. Later changes have no effect.
+    if [[ ! -f "${data_dir}/idp.db" && -n "${NETBIRD_ADMIN_EMAIL}" && -n "${NETBIRD_ADMIN_PASSWORD}" ]]; then
+        echo "    owner:"
+        echo "      email: $(yaml_quote "${NETBIRD_ADMIN_EMAIL}")"
+        echo "      password: $(yaml_quote "$(printf '%s' "${NETBIRD_ADMIN_PASSWORD}" | htpasswd -niBC 10 '' | tr -d ':\n')")"
+    fi
+    echo "  store:"
+    echo "    engine: sqlite"
+    echo "    encryptionKey: $(yaml_quote "${store_key}")"
+} > "${config}.tmp"
+mv "${config}.tmp" "${config}"
+
+if [[ ! -f "${data_dir}/idp.db" && ( -z "${NETBIRD_ADMIN_EMAIL}" || -z "${NETBIRD_ADMIN_PASSWORD}" ) ]]; then
+    echo "netbird: NETBIRD_ADMIN_EMAIL and NETBIRD_ADMIN_PASSWORD are not set, so the first person to open ${base_url} creates the administrator account" >&2
+fi
+
+umask 022
+
+# The dashboard's own start script writes the addresses into its static files and the Content-Security-Policy into
+# the nginx configuration. It edits the files in place, so it always starts from a clean copy.
+find "${html_dir}" -mindepth 1 -delete
+cp -a "${html_source}/." "${html_dir}/"
+
+export AUTH_AUTHORITY="${base_url}/oauth2"
+export AUTH_CLIENT_ID=netbird-dashboard
+export AUTH_CLIENT_SECRET=
+export AUTH_AUDIENCE=netbird-dashboard
+export AUTH_SUPPORTED_SCOPES="openid profile email groups"
+export AUTH_REDIRECT_URI=/nb-auth
+export AUTH_SILENT_REDIRECT_URI=/nb-silent-auth
+export USE_AUTH0=false
+export NETBIRD_MGMT_API_ENDPOINT="${base_url}"
+export NETBIRD_MGMT_GRPC_API_ENDPOINT="${base_url}"
+
+netbird-dashboard-init true > /dev/null

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "image": "wodby/netbird",
+  "versions": [
+    {
+      "version": {
+        "env": "NETBIRD0"
+      },
+      "variants": [
+        {
+          "short": [
+            "{minor}",
+            "{major}"
+          ],
+          "full": "{version}"
+        }
+      ]
+    }
+  ]
+}

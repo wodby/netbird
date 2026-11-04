@@ -1,0 +1,93 @@
+name: Build docker image
+
+on:
+  push:
+    branches:
+      - main
+
+    tags:
+      - '*'
+      - '!*-r[0-9]*'
+
+env:
+  NETBIRD0: '0.82.0'
+  NETBIRD_DASHBOARD: 'v2.96.0'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      netbird-versions: ${{ steps.set-matrix.outputs.netbird-versions }}
+    steps:
+      - id: set-matrix
+        run: |
+          cat << 'EOF' > versions.json
+          [
+            {"key": "netbird0", "version": "${{ env.NETBIRD0 }}", "latest": "1", "latest_major": "1"}
+          ]
+          EOF
+          echo "netbird-versions=$(cat versions.json | jq -c .)" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup
+    strategy:
+      matrix:
+        netbird: ${{ fromJson(needs.setup.outputs.netbird-versions) }}
+        arch:
+          - amd64
+          - arm64
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: build and push
+        env:
+          NETBIRD_VER: ${{ matrix.netbird.version }}
+          NETBIRD_DASHBOARD_VER: ${{ env.NETBIRD_DASHBOARD }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          make
+          make test
+          make push
+
+  push:
+    runs-on: ubuntu-latest
+    needs:
+      - setup
+      - build
+    strategy:
+      matrix:
+        netbird: ${{ fromJson(needs.setup.outputs.netbird-versions) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - uses: ./.github/actions
+        with:
+          version: ${{ matrix.netbird.version }}
+          latest: ${{ matrix.netbird.latest }}
+          latest_major: ${{ matrix.netbird.latest_major }}
+  image-revision-aliases:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/r')
+    needs: [ push ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: image-revision-aliases-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: wodby/images/.github/actions/image-revision-aliases@aee656b81ae84e0dca0cfdbea173057abe4a9426
+        with:
+          docker_username: ${{ secrets.DOCKER_USERNAME }}
+          docker_password: ${{ secrets.DOCKER_PASSWORD }}
