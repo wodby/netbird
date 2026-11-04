@@ -149,7 +149,16 @@ for _ in $(seq 1 60); do
     sleep 2
 done
 [[ -n "${ip_b}" ]] || fail "peer-a can't reach peer-b"
-docker exec "${NAME}-peer-a" netbird status --detail | grep -q "Connection type: Relayed" || fail "the peers aren't relayed"
+# The status reports the connection type a moment after the first packets pass.
+relayed=""
+for _ in $(seq 1 30); do
+    if docker exec "${NAME}-peer-a" netbird status --detail 2>/dev/null | grep -q "Connection type: Relayed"; then
+        relayed=1
+        break
+    fi
+    sleep 1
+done
+[[ -n "${relayed}" ]] || fail "the peers aren't relayed: $(docker exec "${NAME}-peer-a" netbird status --detail 2>&1)"
 echo "OK"
 
 echo -n "Checking the account survives a restart... "
