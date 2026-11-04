@@ -23,6 +23,7 @@ The image is made for a proxy that terminates TLS, such as a Kubernetes gateway,
 [git tags](https://github.com/wodby/netbird/releases). We strongly recommend using images only with stability tags.
 
 - Based on Debian (`debian:trixie-slim`), with the binaries and the dashboard from NetBird's official images
+- Every build input is pinned by digest in `base-images.mk`, which the [update automation](https://github.com/wodby/images) refreshes: a new NetBird or dashboard release, or a rebuilt Debian or NetBird image, releases a new image revision
 - [GitHub actions builds](https://github.com/wodby/netbird/actions)
 - [Docker Hub](https://hub.docker.com/r/wodby/netbird)
 

@@ -1,5 +1,7 @@
 -include env_make
 
+include base-images.mk
+
 NETBIRD_VER ?= 0.82.0
 NETBIRD_DASHBOARD_VER ?= v2.96.0
 NETBIRD_VER_MINOR = $(shell echo "${NETBIRD_VER}" | grep -oE '^[0-9]+\.[0-9]+')
@@ -15,12 +17,22 @@ ifneq ($(ARCH),)
 	override TAG := $(TAG)-$(ARCH)
 endif
 
-.PHONY: build test push shell run clean buildx-imagetools-create
+.PHONY: check-pins build test push shell run clean buildx-imagetools-create
 
 default: build
 
-build:
+# The pinned NetBird images must be the versions being built.
+check-pins:
+	$(if $(filter netbirdio/netbird-server:$(NETBIRD_VER)@%,$(BUILD_IMAGE_NETBIRD_SERVER)),,$(error base-images.mk pins no netbird-server $(NETBIRD_VER)))
+	$(if $(filter netbirdio/relay:$(NETBIRD_VER)@%,$(BUILD_IMAGE_NETBIRD_RELAY)),,$(error base-images.mk pins no relay $(NETBIRD_VER)))
+	$(if $(filter netbirdio/dashboard:$(NETBIRD_DASHBOARD_VER)@%,$(BUILD_IMAGE_NETBIRD_DASHBOARD)),,$(error base-images.mk pins no dashboard $(NETBIRD_DASHBOARD_VER)))
+
+build: check-pins
 	docker build -t $(REPO):$(TAG) \
+		--build-arg BASE_IMAGE="$(BASE_IMAGE)" \
+		--build-arg NETBIRD_SERVER_IMAGE="$(BUILD_IMAGE_NETBIRD_SERVER)" \
+		--build-arg NETBIRD_RELAY_IMAGE="$(BUILD_IMAGE_NETBIRD_RELAY)" \
+		--build-arg NETBIRD_DASHBOARD_IMAGE="$(BUILD_IMAGE_NETBIRD_DASHBOARD)" \
 		--build-arg NETBIRD_VER=$(NETBIRD_VER) \
 		--build-arg NETBIRD_DASHBOARD_VER=$(NETBIRD_DASHBOARD_VER) \
 		./
