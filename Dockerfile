@@ -1,13 +1,18 @@
 ARG NETBIRD_VER=0.82.0
 ARG NETBIRD_DASHBOARD_VER=v2.96.0
+# The Makefile passes digest-pinned references from base-images.mk; these defaults are for plain docker builds.
+ARG BASE_IMAGE=debian:trixie-slim
+ARG NETBIRD_SERVER_IMAGE=netbirdio/netbird-server:${NETBIRD_VER}
+ARG NETBIRD_RELAY_IMAGE=netbirdio/relay:${NETBIRD_VER}
+ARG NETBIRD_DASHBOARD_IMAGE=netbirdio/dashboard:${NETBIRD_DASHBOARD_VER}
 
 # The NetBird binaries and the dashboard's static build come from NetBird's own images. netbird-server is linked
 # against glibc, so this image is based on Debian rather than Alpine.
-FROM netbirdio/netbird-server:${NETBIRD_VER} AS server
-FROM netbirdio/relay:${NETBIRD_VER} AS relay
-FROM netbirdio/dashboard:${NETBIRD_DASHBOARD_VER} AS dashboard
+FROM ${NETBIRD_SERVER_IMAGE} AS server
+FROM ${NETBIRD_RELAY_IMAGE} AS relay
+FROM ${NETBIRD_DASHBOARD_IMAGE} AS dashboard
 
-FROM debian:trixie-slim
+FROM ${BASE_IMAGE}
 
 ARG NETBIRD_VER=0.82.0
 ARG NETBIRD_DASHBOARD_VER=v2.96.0
