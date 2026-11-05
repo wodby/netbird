@@ -3,7 +3,7 @@
 BASE_IMAGE_REPOSITORY := debian
 BASE_IMAGE_VERSION_SUFFIX :=
 
-BASE_IMAGE_DIGEST_trixie-slim := sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+BASE_IMAGE_DIGEST_trixie-slim := sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
 # NetBird's own images, which the build copies the binaries and the dashboard from. The server and relay tags match
 # NETBIRD_VER and the dashboard tag NETBIRD_DASHBOARD_VER.
