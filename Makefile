@@ -2,8 +2,8 @@
 
 include base-images.mk
 
-NETBIRD_VER ?= 0.82.0
-NETBIRD_DASHBOARD_VER ?= v2.96.0
+NETBIRD_VER ?= 0.82.1
+NETBIRD_DASHBOARD_VER ?= v2.96.1
 NETBIRD_VER_MINOR = $(shell echo "${NETBIRD_VER}" | grep -oE '^[0-9]+\.[0-9]+')
 
 TAG ?= $(NETBIRD_VER_MINOR)

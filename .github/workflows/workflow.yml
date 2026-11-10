@@ -10,8 +10,8 @@ on:
       - '!*-r[0-9]*'
 
 env:
-  NETBIRD0: '0.82.0'
-  NETBIRD_DASHBOARD: 'v2.96.0'
+  NETBIRD0: '0.82.1'
+  NETBIRD_DASHBOARD: 'v2.96.1'
 
 jobs:
   setup:
