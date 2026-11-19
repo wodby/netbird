@@ -1,5 +1,5 @@
 ARG NETBIRD_VER=0.83.1
-ARG NETBIRD_DASHBOARD_VER=v2.97.0
+ARG NETBIRD_DASHBOARD_VER=v2.98.0
 # The Makefile passes digest-pinned references from base-images.mk; these defaults are for plain docker builds.
 ARG BASE_IMAGE=debian:trixie-slim
 ARG NETBIRD_SERVER_IMAGE=netbirdio/netbird-server:${NETBIRD_VER}
@@ -15,7 +15,7 @@ FROM ${NETBIRD_DASHBOARD_IMAGE} AS dashboard
 FROM ${BASE_IMAGE}
 
 ARG NETBIRD_VER=0.83.1
-ARG NETBIRD_DASHBOARD_VER=v2.97.0
+ARG NETBIRD_DASHBOARD_VER=v2.98.0
 
 ENV NETBIRD_VER="${NETBIRD_VER}" \
     NETBIRD_DASHBOARD_VER="${NETBIRD_DASHBOARD_VER}"
