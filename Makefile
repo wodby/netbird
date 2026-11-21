@@ -2,7 +2,7 @@
 
 include base-images.mk
 
-NETBIRD_VER ?= 0.83.1
+NETBIRD_VER ?= 0.83.2
 NETBIRD_DASHBOARD_VER ?= v2.98.0
 NETBIRD_VER_MINOR = $(shell echo "${NETBIRD_VER}" | grep -oE '^[0-9]+\.[0-9]+')
 

@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NETBIRD0: '0.83.1'
+  NETBIRD0: '0.83.2'
   NETBIRD_DASHBOARD: 'v2.98.0'
 
 jobs:
