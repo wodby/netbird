@@ -7,8 +7,8 @@ BASE_IMAGE_DIGEST_trixie-slim := sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e7436
 
 # NetBird's own images, which the build copies the binaries and the dashboard from. The server and relay tags match
 # NETBIRD_VER and the dashboard tag NETBIRD_DASHBOARD_VER.
-BUILD_IMAGE_NETBIRD_SERVER := netbirdio/netbird-server:0.83.2@sha256:47e43b1b9e6343eb99d99a612513579111439dd016805912b0fae95ce802b908
-BUILD_IMAGE_NETBIRD_RELAY := netbirdio/relay:0.83.2@sha256:1b27bbadef5ae7632c46c086c91a872dad7a024aaeb2e0ee7a99faeba23c859f
-BUILD_IMAGE_NETBIRD_DASHBOARD := netbirdio/dashboard:v2.99.0@sha256:8005cb3bfbb1433de117af5070b27b175f10730f8acb548e398ab6d20cddf9f4
+BUILD_IMAGE_NETBIRD_SERVER := netbirdio/netbird-server:0.84.0@sha256:e439e43e8db328656baeafe124939cfdac3a71cc38fcad9b44deefe0e84a5ede
+BUILD_IMAGE_NETBIRD_RELAY := netbirdio/relay:0.84.0@sha256:a6f26047934d0a9cf03e644e91f37c4816366ccd0e755347c8b00b2619e86a3f
+BUILD_IMAGE_NETBIRD_DASHBOARD := netbirdio/dashboard:v2.100.0@sha256:0b06599c1ce9b91448faf3fae682fe66603c67034b2bd093dc66165283d031cd
 
 BASE_IMAGE = $(BASE_IMAGE_REPOSITORY):trixie-slim@$(BASE_IMAGE_DIGEST_trixie-slim)
